@@ -1,0 +1,89 @@
+#Note the current data set is the "height of the pandemic layoffs" dataset we cleaned in a prior project https://github.com/RosalineFranklin/Job-Market-Data-Cleaning-Portfolio-Project-In-MYSQL
+  Also, all queries and edits are made using the "layoffs_staging2" table from the data cleaning project because we DO NOT want to alter any data on our original raw data
+
+#We wanted to explore our data a bit to see which companies felt the most impact during the 2020 Covid-19 Pandemic
+
+#The first thing we do is select the whole table to see a snapshot of our data at a glance
+  select *
+  from layoffs_staging2;
+
+#To answer our question about which companies were most impacted by the pandemic, we looked at the percentages of layoffs.  This query selects the largest values from the total laid off and percentages laid off.
+  Note a 1 in percentage laid off column means that company laid off 100% of their staff.
+  select max(total_laid_off), max(percentage_laid_off)
+  from layoffs_staging2;
+
+#We looked further into the companies that laid off 100% of their employees.  This query orders the data by "funds_raised_millions" starting at the largest values moving to the smallest values.
+  select *
+  from layoffs_staging2
+  where percentage_laid_off = 1
+  order by funds_raised_millions desc;
+
+#Instead of a percentage of employees laid off, this query looks into the total number of employees laid off by company 
+  select company, sum(total_laid_off)
+  from layoffs_staging2
+  group by company
+  order by 2 desc;
+
+#This query gives us a date range by pulling the first date found on the table and the last date found on the table.
+  select min(`date`), max(`date`)
+  from layoffs_staging2;
+
+#Instead of by company, this query pulls the total sum of staff laid off by industry
+  select industry, sum(total_laid_off)
+  from layoffs_staging2
+  group by industry
+  order by 2 desc;
+
+#The pandemic had an effect on more than just one country as shown in this query:
+  select country, sum(total_laid_off)
+  from layoffs_staging2
+  group by country
+  order by 2 desc;
+
+#This query shows the total number of employees laid off by country broken down by year
+  select year(`date`), country, sum(total_laid_off)
+  from layoffs_staging2
+  group by year(`date`), country
+  order by 2 desc;
+
+#This query looks at the stage of funding a company was at when layoffs started.
+  select stage, sum(total_laid_off)
+  from layoffs_staging2
+  group by stage
+  order by 2 desc;
+
+#We wanted to get a rolling total by month in the pandemic to see which months had the most impact over the years.  This was accomplished using a substring and a CTE.
+  select substring(`date`, 1,7) as `MONTH` , sum(total_laid_off)
+  from layoffs_staging2
+  where substring(`date`, 1,7) is not null
+  group by `MONTH`
+  order by 1 asc;
+
+  with rolling_total as
+    (
+  select substring(`date`, 1,7) as `MONTH` , sum(total_laid_off) as total_off
+  from layoffs_staging2
+  where substring(`date`, 1,7) is not null
+  group by `MONTH`
+  order by 1 asc
+    )
+  select `MONTH`, total_off,
+  sum(total_off) over(order by `MONTH`) as rolling_total
+  from rolling_total;
+
+
+#We wanted to see what the top 5 ranking companies that laid off employees.  We accomplished this using multiple CTEs to rank top 5 company layoffs per year.
+  with company_year (company, years, total_laid_off) as 
+    (
+  select company, Year(`date`), sum(total_laid_off)
+  from layoffs_staging2
+  group by company, Year(`date`)
+    ), company_year_rank as
+    (
+  select *, dense_rank() over(partition by years order by total_laid_off desc) as Rank_laid_off
+  from company_year
+  where years is not null
+    )
+  select *
+  from company_year_rank
+  where rank_laid_off <= 5;
